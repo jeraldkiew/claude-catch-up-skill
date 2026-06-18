@@ -1,0 +1,73 @@
+diff --git a/src/store/ipCounter.ts b/src/store/ipCounter.ts
+new file mode 100644
+index 0000000..aaaaaaa
+--- /dev/null
++++ b/src/store/ipCounter.ts
+@@ -0,0 +1,16 @@
++// In-memory per-IP request counter.
++// NOTE: all state lives in this process's memory only.
++type Bucket = { count: number; resetAt: number };
++
++const buckets = new Map<string, Bucket>();
++
++export function hit(ip: string, windowMs: number): number {
++  const now = Date.now();
++  const existing = buckets.get(ip);
++  if (!existing || now > existing.resetAt) {
++    buckets.set(ip, { count: 1, resetAt: now + windowMs });
++    return 1;
++  }
++  existing.count += 1;
++  return existing.count;
++}
+diff --git a/src/middleware/rateLimit.ts b/src/middleware/rateLimit.ts
+new file mode 100644
+index 0000000..bbbbbbb
+--- /dev/null
++++ b/src/middleware/rateLimit.ts
+@@ -0,0 +1,32 @@
++import { Request, Response, NextFunction } from "express";
++import { hit } from "../store/ipCounter";
++
++const WINDOW_MS = 60_000;
++const MAX_HITS = 10;
++
++function clientIp(req: Request): string {
++  return ((req.headers["x-forwarded-for"] as string) ?? req.ip) || "unknown";
++}
++
++/**
++ * Per-IP rate limiter for the login route.
++ * Rejects a client after it exceeds MAX_HITS within WINDOW_MS.
++ */
++export function rateLimit(
++  req: Request,
++  res: Response,
++  next: NextFunction,
++): void {
++  const ip = clientIp(req);
++  try {
++    const count = hit(ip, WINDOW_MS);
++    if (count > MAX_HITS) {
++      res.status(429).json({ error: "Too many login attempts" });
++      return;
++    }
++    next();
++  } catch (err) {
++    // Fail open: if the counter store throws, let the request through.
++    next();
++  }
++}
+diff --git a/src/routes/auth.ts b/src/routes/auth.ts
+index 1234567..7654321 100644
+--- a/src/routes/auth.ts
++++ b/src/routes/auth.ts
+@@ -1,6 +1,7 @@
+ import { Router } from "express";
++import { rateLimit } from "../middleware/rateLimit";
+ import { login } from "../controllers/auth";
+
+ const router = Router();
+-router.post("/login", login);
++router.post("/login", rateLimit, login);
+ export default router;

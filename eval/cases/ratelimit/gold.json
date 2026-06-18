@@ -1,0 +1,24 @@
+{
+  "intent": "Add per-IP rate limiting to the login route to slow credential-stuffing attacks.",
+  "blast_radius": [
+    "every request to POST /login now passes through new middleware",
+    "introduces a new shared in-memory store"
+  ],
+  "planted_issues": [
+    {
+      "id": "fail_open",
+      "description": "The middleware fails open: if the counter store throws, the request is let through, so a store fault silently disables rate limiting.",
+      "detect_any": ["fail open", "fail-open", "fails open", "let the request through", "swallow"]
+    },
+    {
+      "id": "in_memory_scale",
+      "description": "The counter lives in process memory, so it resets on restart and is not shared across instances/replicas.",
+      "detect_any": ["in-memory", "in memory", "won't survive", "restart", "scale across", "multiple instance", "replica", "per-process", "per process"]
+    }
+  ],
+  "key_locations": [
+    { "file": "src/middleware/rateLimit.ts", "line": 15 },
+    { "file": "src/middleware/rateLimit.ts", "line": 29 },
+    { "file": "src/store/ipCounter.ts", "line": 7 }
+  ]
+}
